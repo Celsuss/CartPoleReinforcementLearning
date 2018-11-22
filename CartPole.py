@@ -70,26 +70,28 @@ model_path = "./policy_net"
 env = gym.make('CartPole-v0') 
 n_games_per_update = 10
 n_max_steps = 10000
-n_iterations = 250*80
+n_iterations = 250
 save_iteractions = 10
 discount_rate = 0.95
 
 with tf.Session() as sess:
     if os.path.isfile(checkpoint_iteration_path):
         # if the checkpoint file exists, restore the model and load the iteration number
+        print("Restoring previous model")
+
         with open(checkpoint_iteration_path, "rb") as f:
             start_iteration = int(f.read())
-        print("Restoring previous model")
+
         saver.restore(sess, checkpoint_path)
     else:
         start_iteration = 0
         sess.run(init)
 
-    init.run()
     for iteration in range(start_iteration, start_iteration + n_iterations):
         all_rewards = []
         all_gradients = []
         for game in range(n_games_per_update):
+            current_reward = 0
             current_rewards = []
             current_gradients = []
             obs = env.reset()
@@ -98,12 +100,13 @@ with tf.Session() as sess:
                     env.render()
                 action_val, gradients_val = sess.run([action, gradients], feed_dict={X: obs.reshape(1, n_inputs)})
                 obs, reward, done, info = env.step(action_val[0][0])
+                current_reward += reward
                 current_rewards.append(reward)
                 current_gradients.append(gradients_val)
                 if done:
                     break
             if game == 0:
-                print("Iteration {}, reward {}".format(iteration, len(current_rewards)))
+                print("Iteration {}, reward {}".format(iteration, current_reward))
             all_rewards.append(current_rewards)
             all_gradients.append(current_gradients)
 
@@ -118,7 +121,8 @@ with tf.Session() as sess:
         sess.run(training_op, feed_dict=feed_dict)
         if iteration % save_iteractions == 0:
             print("Checkpoint saved")
-            saver.save(sess, checkpoint_path)
+            save_path = saver.save(sess, checkpoint_path)
+            print(save_path)
             with open(checkpoint_iteration_path, "wb") as f:
                 f.write(b"%d" % (iteration + 1))
 
