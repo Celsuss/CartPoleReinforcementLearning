@@ -3,13 +3,19 @@ import gym
 import numpy as np
 import tensorflow as tf
 
+##########################
+# Create the environment #
+##########################
+ 
+env = gym.make('CartPole-v1') 
+
 #############################
 # Create the Neural Network #
 #############################
 
 learning_rate = 0.01
 
-n_inputs = 4    # == env.obersvation_space.shape[0]
+n_inputs = env.observation_space.shape[0]
 n_hidden = 4
 n_outputs = 1
 
@@ -59,29 +65,28 @@ def discount_and_normalize_rewards(all_rewards, discount_rate):
     reward_std = flat_rewards.std()
     return [(discounted_rewards - reward_mean)/reward_std for discounted_rewards in all_discounted_rewards]
 
-##########################
-# Time to play the game! #
-##########################
+###########################
+# Time to train the model #
+###########################
 
 checkpoint_path = "./policy_net.ckpt"
 checkpoint_iteration_path = checkpoint_path + ".iteration"
 model_path = "./policy_net"
 
-env = gym.make('CartPole-v0') 
 n_games_per_update = 10
-n_max_steps = 10000
+n_max_steps = 5000
 n_iterations = 250
 save_iteractions = 10
 discount_rate = 0.95
+
+env._max_episode_steps = n_max_steps
 
 with tf.Session() as sess:
     if os.path.isfile(checkpoint_iteration_path):
         # if the checkpoint file exists, restore the model and load the iteration number
         print("Restoring previous model")
-
         with open(checkpoint_iteration_path, "rb") as f:
             start_iteration = int(f.read())
-
         saver.restore(sess, checkpoint_path)
     else:
         start_iteration = 0
@@ -91,7 +96,6 @@ with tf.Session() as sess:
         all_rewards = []
         all_gradients = []
         for game in range(n_games_per_update):
-            current_reward = 0
             current_rewards = []
             current_gradients = []
             obs = env.reset()
@@ -100,13 +104,13 @@ with tf.Session() as sess:
                     env.render()
                 action_val, gradients_val = sess.run([action, gradients], feed_dict={X: obs.reshape(1, n_inputs)})
                 obs, reward, done, info = env.step(action_val[0][0])
-                current_reward += reward
                 current_rewards.append(reward)
                 current_gradients.append(gradients_val)
                 if done:
                     break
+
             if game == 0:
-                print("Iteration {}, reward {}".format(iteration, current_reward))
+                print("Iteration {}, reward {}".format(iteration, len(current_rewards)))
             all_rewards.append(current_rewards)
             all_gradients.append(current_gradients)
 
@@ -114,8 +118,8 @@ with tf.Session() as sess:
         feed_dict = {}
         for var_index, gradient_placeholder in enumerate(gradient_placeholders):
             mean_gradients = np.mean([reward * all_gradients[game_index][step][var_index]
-                                      for game_index, rewards in enumerate(all_rewards)
-                                          for step, reward in enumerate(rewards)], axis=0)
+                                        for game_index, rewards in enumerate(all_rewards)
+                                        for step, reward in enumerate(rewards)], axis=0)
             feed_dict[gradient_placeholder] = mean_gradients
 
         sess.run(training_op, feed_dict=feed_dict)
